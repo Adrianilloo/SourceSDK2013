@@ -2790,6 +2790,12 @@ void CBaseCombatWeapon::RecvProxy_WeaponState( const CRecvProxyData *pData, void
 	pWeapon->m_iState = pData->m_Value.m_Int;
 	pWeapon->UpdateVisibility();
 }
+
+static void RecvProxy_WeaponOwner(const CRecvProxyData* pData, void* pStruct, void* pOut)
+{
+	RecvProxy_IntToEHandle(pData, pStruct, pOut);
+	((CBaseCombatWeapon*)pStruct)->UpdateVisibility();
+}
 #endif
 
 #if PREDICTION_ERROR_CHECK_LEVEL > 1
@@ -2864,6 +2870,6 @@ BEGIN_NETWORK_TABLE(CBaseCombatWeapon, DT_BaseCombatWeapon)
 	RecvPropInt( RECVINFO(m_iViewModelIndex)),
 	RecvPropInt( RECVINFO(m_iWorldModelIndex)),
 	RecvPropInt( RECVINFO(m_iState), 0, &CBaseCombatWeapon::RecvProxy_WeaponState ),
-	RecvPropEHandle( RECVINFO(m_hOwner ) ),
+	RecvPropEHandle( RECVINFO(m_hOwner ), RecvProxy_WeaponOwner ),
 #endif
 END_NETWORK_TABLE()
