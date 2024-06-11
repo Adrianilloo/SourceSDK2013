@@ -928,6 +928,7 @@ void CHL2MP_Player::ChangeTeam( int iTeam )
 
 	if ( iTeam == TEAM_SPECTATOR )
 	{
+		ForceDropOfCarriedPhysObjects(NULL);
 		RemoveAllItems( true );
 
 		State_Transition( STATE_OBSERVER_MODE );
