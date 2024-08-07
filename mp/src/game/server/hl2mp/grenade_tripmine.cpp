@@ -123,7 +123,10 @@ void CTripmineGrenade::PowerupThink( void  )
 
 		// play enabled sound
 		EmitSound( "TripmineGrenade.Activate" );
+
+		return;
 	}
+
 	SetNextThink( gpGlobals->curtime + 0.1f );
 }
 
@@ -171,10 +174,10 @@ void CTripmineGrenade::MakeBeam( void )
 	// to appear if person right in front of it
 	SetNextThink( gpGlobals->curtime + 1.0f );
 
-	Vector vecTmpEnd = GetLocalOrigin() + m_vecDir * 2048 * drawLength;
+	m_vecEnd = GetLocalOrigin() + m_vecDir * 2048 * drawLength;
 
 	m_pBeam = CBeam::BeamCreate( g_pModelNameLaser, 0.35 );
-	m_pBeam->PointEntInit( vecTmpEnd, this );
+	m_pBeam->PointEntInit( m_vecEnd, this );
 	m_pBeam->SetColor( 255, 55, 52 );
 	m_pBeam->SetScrollRate( 25.6 );
 	m_pBeam->SetBrightness( 64 );

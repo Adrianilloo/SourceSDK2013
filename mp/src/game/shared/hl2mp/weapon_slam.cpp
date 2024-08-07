@@ -176,6 +176,7 @@ void CWeapon_SLAM::SlamTouch( CBaseEntity *pOther )
 bool CWeapon_SLAM::Holster( CBaseCombatWeapon *pSwitchingTo )
 {
 	SetThink(NULL);
+	m_bAttachTripmine = false;
 	return BaseClass::Holster(pSwitchingTo);
 }
 
@@ -211,11 +212,15 @@ void CWeapon_SLAM::PrimaryAttack( void )
 	switch (m_tSlamState)
 	{
 		case SLAM_TRIPMINE_READY:
-			if (CanAttachSLAM())
+		{
+			trace_t tr;
+
+			if (CanAttachSLAM(tr))
 			{
-				StartTripmineAttach();
+				StartTripmineAttach(tr);
 			}
 			break;
+		}
 		case SLAM_SATCHEL_THROW:
 			StartSatchelThrow();
 			break;
@@ -358,9 +363,7 @@ void CWeapon_SLAM::TripmineAttach( void )
 
 	trace_t tr;
 
-	UTIL_TraceLine( vecSrc, vecSrc + (vecAiming * 128), MASK_SOLID, pOwner, COLLISION_GROUP_NONE, &tr );
-	
-	if (tr.fraction < 1.0)
+	if (CanAttachSLAM(tr))
 	{
 		CBaseEntity *pEntity = tr.m_pEnt;
 		if (pEntity && !(pEntity->GetFlags() & FL_CONVEYOR))
@@ -389,7 +392,7 @@ void CWeapon_SLAM::TripmineAttach( void )
 // Input  :
 // Output :
 //-----------------------------------------------------------------------------
-void CWeapon_SLAM::StartTripmineAttach( void )
+void CWeapon_SLAM::StartTripmineAttach( const trace_t& tr )
 {
 	// Only the player fires this way so we can cast
 	CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
@@ -404,44 +407,37 @@ void CWeapon_SLAM::StartTripmineAttach( void )
 	vecSrc = pPlayer->EyePosition();
 	
 	QAngle angles = pPlayer->GetLocalAngles();
-
 	AngleVectors( angles, &vecAiming );
-
-	trace_t tr;
-
-	UTIL_TraceLine( vecSrc, vecSrc + (vecAiming * 128), MASK_SOLID, pPlayer, COLLISION_GROUP_NONE, &tr );
 	
-	if (tr.fraction < 1.0)
+	// ALERT( at_console, "hit %f\n", tr.flFraction );
+
+	CBaseEntity *pEntity = tr.m_pEnt;
+
+	if (pEntity && !(pEntity->GetFlags() & FL_CONVEYOR))
 	{
-		// ALERT( at_console, "hit %f\n", tr.flFraction );
+		// player "shoot" animation
+		pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
-		CBaseEntity *pEntity = tr.m_pEnt;
-		if (pEntity && !(pEntity->GetFlags() & FL_CONVEYOR))
+		// -----------------------------------------
+		//  Play attach animation
+		// -----------------------------------------
+
+		if (m_bDetonatorArmed)
 		{
-			// player "shoot" animation
-			pPlayer->SetAnimation( PLAYER_ATTACK1 );
-
-			// -----------------------------------------
-			//  Play attach animation
-			// -----------------------------------------
-
-			if (m_bDetonatorArmed)
-			{
-				SendWeaponAnim(ACT_SLAM_STICKWALL_ATTACH);
-			}
-			else
-			{
-				SendWeaponAnim(ACT_SLAM_TRIPMINE_ATTACH);
-			}
-
-			m_bNeedReload		= true;
-			m_bAttachTripmine	= true;
-			m_bNeedDetonatorDraw = m_bDetonatorArmed;
+			SendWeaponAnim(ACT_SLAM_STICKWALL_ATTACH);
 		}
 		else
 		{
-			// ALERT( at_console, "no deploy\n" );
+			SendWeaponAnim(ACT_SLAM_TRIPMINE_ATTACH);
 		}
+
+		m_bNeedReload		= true;
+		m_bAttachTripmine	= true;
+		m_bNeedDetonatorDraw = m_bDetonatorArmed;
+	}
+	else
+	{
+		// ALERT( at_console, "no deploy\n" );
 	}
 	
 	m_flNextPrimaryAttack	= gpGlobals->curtime + SequenceDuration();
@@ -471,10 +467,11 @@ void CWeapon_SLAM::SatchelThrow( void )
 	Vector vecThrow;
 	GetOwner()->GetVelocity( &vecThrow, NULL );
 	vecThrow += vecFacing * 500;
+	trace_t tr;
 
 	// Player may have turned to face a wall during the throw anim in which case
 	// we don't want to throw the SLAM into the wall
-	if (CanAttachSLAM())
+	if (CanAttachSLAM(tr))
 	{
 		vecThrow = vecFacing;
 		vecSrc   = pPlayer->WorldSpaceCenter() + vecFacing * 5.0;
@@ -549,12 +546,9 @@ void CWeapon_SLAM::SatchelAttach( void )
 
 	Vector vecSrc	 = pOwner->Weapon_ShootPosition( );
 	Vector vecAiming = pOwner->BodyDirection2D( );
-
 	trace_t tr;
-
-	UTIL_TraceLine( vecSrc, vecSrc + (vecAiming * 128), MASK_SOLID, pOwner, COLLISION_GROUP_NONE, &tr );
 	
-	if (tr.fraction < 1.0)
+	if (CanAttachSLAM(tr))
 	{
 		CBaseEntity *pEntity = tr.m_pEnt;
 		if (pEntity && !(pEntity->GetFlags() & FL_CONVEYOR))
@@ -595,12 +589,9 @@ void CWeapon_SLAM::StartSatchelAttach( void )
 
 	Vector vecSrc	 = pOwner->Weapon_ShootPosition( );
 	Vector vecAiming = pOwner->BodyDirection2D( );
-
 	trace_t tr;
-
-	UTIL_TraceLine( vecSrc, vecSrc + (vecAiming * 128), MASK_SOLID, pOwner, COLLISION_GROUP_NONE, &tr );
 	
-	if (tr.fraction < 1.0)
+	if (CanAttachSLAM(tr))
 	{
 		CBaseEntity *pEntity = tr.m_pEnt;
 		if (pEntity && !(pEntity->GetFlags() & FL_CONVEYOR))
@@ -665,8 +656,10 @@ void CWeapon_SLAM::SLAMThink( void )
 	CBaseCombatCharacter *pOwner  = GetOwner();
 
 	if ( (pOwner && pOwner->GetAmmoCount(m_iSecondaryAmmoType) > 0))
-	{	
-		if (CanAttachSLAM())
+	{
+		trace_t tr;
+
+		if (CanAttachSLAM(tr))
 		{
 			if (m_tSlamState == SLAM_SATCHEL_THROW)
 			{
@@ -696,7 +689,7 @@ void CWeapon_SLAM::SLAMThink( void )
 // Input  :
 // Output :
 //-----------------------------------------------------------------------------
-bool CWeapon_SLAM::CanAttachSLAM( void )
+bool CWeapon_SLAM::CanAttachSLAM( trace_t& tr )
 {
 	CHL2MP_Player *pOwner = ToHL2MPPlayer( GetOwner() );
 
@@ -713,8 +706,6 @@ bool CWeapon_SLAM::CanAttachSLAM( void )
 	QAngle angles = pOwner->GetLocalAngles();
 
 	AngleVectors( angles, &vecAiming );
-
-	trace_t tr;
 
 	Vector	vecEnd = vecSrc + (vecAiming * 42);
 	UTIL_TraceLine( vecSrc, vecEnd, MASK_SOLID, pOwner, COLLISION_GROUP_NONE, &tr );
@@ -1000,12 +991,14 @@ bool CWeapon_SLAM::Deploy( void )
 	m_bNeedReload = false;
 	if (m_bDetonatorArmed)
 	{
+		trace_t tr;
+
 		if (pOwner->GetAmmoCount(m_iSecondaryAmmoType) <= 0)
 		{
 			iActivity = ACT_SLAM_DETONATOR_DRAW;
 			m_bNeedReload = true;
 		}
-		else if (CanAttachSLAM())
+		else if (CanAttachSLAM(tr))
 		{
 			iActivity = ACT_SLAM_DETONATOR_STICKWALL_DRAW; 
 			SetSlamState(SLAM_TRIPMINE_READY);
@@ -1017,8 +1010,10 @@ bool CWeapon_SLAM::Deploy( void )
 		}
 	}
 	else
-	{	
-		if (CanAttachSLAM())
+	{
+		trace_t tr;
+
+		if (CanAttachSLAM(tr))
 		{
 			iActivity = ACT_SLAM_TRIPMINE_DRAW; 
 			SetSlamState(SLAM_TRIPMINE_READY);
